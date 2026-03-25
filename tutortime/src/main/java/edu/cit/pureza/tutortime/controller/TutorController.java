@@ -30,42 +30,40 @@ public class TutorController {
     @GetMapping
     public ApiResponse<List<Object>> getAllTutors() {
         List<User> tutors = userRepository.findAll().stream()
-            .filter(u -> u.getRole().equals(User.UserRole.TUTOR))
-            .collect(Collectors.toList());
+                .filter(u -> u.getRole().equals(User.UserRole.TUTOR))
+                .collect(Collectors.toList());
 
         return ApiResponse.success(
-            tutors.stream()
-                .map(this::mapTutorToDTO)
-                .collect(Collectors.toList())
-        );
+                tutors.stream()
+                        .map(this::mapTutorToDTO)
+                        .collect(Collectors.toList()));
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<Object> getTutorProfile(@PathVariable Long id) {
+    public ApiResponse<Object> getTutorProfile(@PathVariable("id") Long id) {
         User tutor = userRepository.findById(id)
-            .filter(u -> u.getRole().equals(User.UserRole.TUTOR))
-            .orElseThrow(() -> new RuntimeException("Tutor not found"));
+                .filter(u -> u.getRole().equals(User.UserRole.TUTOR))
+                .orElseThrow(() -> new RuntimeException("Tutor not found"));
 
         return ApiResponse.success(mapTutorToDTO(tutor));
     }
 
     @GetMapping("/{id}/availability")
-    public ApiResponse<List<Object>> getTutorAvailability(@PathVariable Long id) {
+    public ApiResponse<List<Object>> getTutorAvailability(@PathVariable("id") Long id) {
         List<AvailabilitySlot> slots = availabilitySlotRepository.findByTutorIdAndIsBookedFalse(id);
 
         return ApiResponse.success(
-            slots.stream()
-                .map(slot -> new Object() {
-                    public Long id_val = slot.getId();
-                    public String date = slot.getStartTime().toLocalDate().toString();
-                    public String time = slot.getStartTime().toLocalTime().toString();
-                    public String location = slot.getLocation();
-                    public Boolean isBooked = slot.getIsBooked();
-                    public String startTime = slot.getStartTime().toString();
-                    public String endTime = slot.getEndTime().toString();
-                })
-                .collect(Collectors.toList())
-        );
+                slots.stream()
+                        .map(slot -> new Object() {
+                            public Long id = slot.getId();
+                            public String date = slot.getStartTime().toLocalDate().toString();
+                            public String time = slot.getStartTime().toLocalTime().toString();
+                            public String location = slot.getLocation();
+                            public Boolean isBooked = slot.getIsBooked();
+                            public String startTime = slot.getStartTime().toString();
+                            public String endTime = slot.getEndTime().toString();
+                        })
+                        .collect(Collectors.toList()));
     }
 
     private Object mapTutorToDTO(User tutor) {
@@ -80,11 +78,11 @@ public class TutorController {
             public String expertise = profile != null ? profile.getExpertise() : "";
             public Double rating = profile != null ? profile.getRating() : 0.0;
             public Integer reviewCount = profile != null ? profile.getReviewCount() : 0;
-            public List<String> subjects = profile != null && profile.getSubjects() != null ?
-                List.of(profile.getSubjects().split(",")) : List.of();
+            public List<String> subjects = profile != null && profile.getSubjects() != null
+                    ? List.of(profile.getSubjects().split(","))
+                    : List.of();
             public String location = profile != null ? profile.getLocation() : "";
             public Boolean isVerified = profile != null ? profile.getIsVerified() : false;
         };
     }
 }
-

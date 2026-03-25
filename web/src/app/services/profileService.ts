@@ -1,9 +1,5 @@
 import { api } from './apiService';
 
-const SUPABASE_URL    = import.meta.env.VITE_SUPABASE_URL    || '';
-const SUPABASE_ANON   = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const STORAGE_BUCKET  = 'profile-photos';
-
 // ─── Types ────────────────────────────────────────────────────────────────
 export interface UserProfile {
   id: number;
@@ -58,55 +54,25 @@ export async function changePassword(payload: ChangePasswordPayload): Promise<st
   return api.put<string>('/api/users/me/password', payload);
 }
 
-// ─── Supabase Storage upload ──────────────────────────────────────────────
+// ─── Backend proxy upload ──────────────────────────────────────────────
 
 /**
- * Upload a file directly to Supabase Storage and return the public URL.
- *
- * Requirements:
- *  - Bucket `profile-photos` must exist and be set to PUBLIC in Supabase dashboard.
- *  - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` must be set in .env
- *
- * If Supabase keys are not configured, falls back to a data URL (preview only).
+ * Upload a file via the Java backend, which securely forwards it to Supabase
+ * Storage and updates the user's profilePhotoUrl in the database.
  */
 export async function uploadProfilePhoto(
   file: File,
   userId: number
 ): Promise<string> {
-  // ── Fallback: if Supabase not configured, return object URL ──
-  if (!SUPABASE_URL || !SUPABASE_ANON || SUPABASE_ANON === 'YOUR_SUPABASE_ANON_KEY') {
-    // Return base64 data URL as temporary fallback
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(file);
-    });
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  // The backend will handle the file upload and update the user, returning the new UserProfile
+  const profile = await api.upload<UserProfile>('/api/users/me/photo', formData);
+  
+  if (!profile.profilePhotoUrl) {
+    throw new Error('Upload succeeded but no photo URL was returned.');
   }
-
-  const ext      = file.name.split('.').pop() ?? 'jpg';
-  const filename = `user-${userId}-${Date.now()}.${ext}`;
-  const path     = `${STORAGE_BUCKET}/${filename}`;
-
-  // Upload to Supabase Storage REST API
-  const uploadRes = await fetch(
-    `${SUPABASE_URL}/storage/v1/object/${path}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${SUPABASE_ANON}`,
-        'Content-Type': file.type || 'application/octet-stream',
-        'x-upsert': 'true',
-      },
-      body: file,
-    }
-  );
-
-  if (!uploadRes.ok) {
-    const err = await uploadRes.json().catch(() => ({}));
-    throw new Error(err.message || 'Failed to upload photo to Supabase Storage');
-  }
-
-  // Public URL
-  return `${SUPABASE_URL}/storage/v1/object/public/${path}`;
+  
+  return profile.profilePhotoUrl;
 }
