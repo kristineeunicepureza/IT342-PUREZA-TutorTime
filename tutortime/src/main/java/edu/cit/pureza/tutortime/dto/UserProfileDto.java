@@ -1,6 +1,7 @@
 package edu.cit.pureza.tutortime.dto;
 
 import edu.cit.pureza.tutortime.entity.User.UserRole;
+import edu.cit.pureza.tutortime.entity.User.VerificationStatus;
 import lombok.*;
 
 @Data @NoArgsConstructor @AllArgsConstructor @Builder
@@ -13,6 +14,7 @@ public class UserProfileDto {
     private String middleInitial;
     private UserRole role;
     private String profilePhotoUrl;
+    private VerificationStatus verificationStatus;
 
     // ── Tutor-only (null for students) ───
     private String  bio;

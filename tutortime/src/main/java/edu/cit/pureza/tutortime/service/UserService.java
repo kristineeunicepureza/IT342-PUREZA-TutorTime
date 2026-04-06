@@ -94,7 +94,8 @@ public class UserService {
                 .lastName(user.getLastName())
                 .middleInitial(user.getMiddleInitial())
                 .role(user.getRole())
-                .profilePhotoUrl(user.getProfilePhotoUrl());
+                .profilePhotoUrl(user.getProfilePhotoUrl())
+                .verificationStatus(user.getVerificationStatus()); // ← required for tutor approval gate
 
         if (user.getRole() == UserRole.TUTOR) {
             tutorProfileRepository.findByTutorId(user.getId()).ifPresent(p -> {

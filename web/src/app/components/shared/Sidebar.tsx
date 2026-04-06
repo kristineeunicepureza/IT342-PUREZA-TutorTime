@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import {
   Home, Users, Calendar, User, LogOut,
   Menu, X, ChevronLeft, ChevronRight,
-  BookOpen, GraduationCap, Settings, LayoutDashboard,
+  BookOpen, GraduationCap, Settings, LayoutDashboard, ShieldCheck, Lock,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -11,9 +11,14 @@ interface SidebarProps {
   role: 'STUDENT' | 'TUTOR' | 'ADMIN';
 }
 
-type MenuItem = { icon: React.ElementType; label: string; path: string };
+type MenuItem = {
+  icon: React.ElementType;
+  label: string;
+  path: string;
+  locked?: boolean;
+};
 
-function getMenuItems(role: string): MenuItem[] {
+function getMenuItems(role: string, isPendingTutor: boolean): MenuItem[] {
   switch (role) {
     case 'STUDENT':
       return [
@@ -24,18 +29,20 @@ function getMenuItems(role: string): MenuItem[] {
       ];
     case 'TUTOR':
       return [
-        { icon: LayoutDashboard, label: 'Dashboard', path: '/tutor/dashboard' },
-        { icon: Calendar,        label: 'Schedule',  path: '/tutor/schedule'  },
-        { icon: GraduationCap,   label: 'Students',  path: '/tutor/students'  },
-        { icon: User,            label: 'Profile',   path: '/profile'         },
+        { icon: LayoutDashboard, label: 'Dashboard', path: '/tutor/dashboard', locked: isPendingTutor },
+        { icon: Calendar,        label: 'Schedule',  path: '/tutor/schedule',  locked: isPendingTutor },
+        { icon: GraduationCap,   label: 'Students',  path: '/tutor/students',  locked: isPendingTutor },
+        { icon: User,            label: 'Profile',   path: '/profile' },
       ];
-    case 'ADMIN':
-      return [
-        { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
-        { icon: Users,           label: 'Users',     path: '/admin/users'     },
-        { icon: BookOpen,        label: 'Sessions',  path: '/admin/sessions'  },
-        { icon: Settings,        label: 'Settings',  path: '/profile'         },
-      ];
+    // AFTER
+case 'ADMIN':
+  return [
+    { icon: LayoutDashboard, label: 'Dashboard',    path: '/admin/dashboard'    },
+    { icon: Users,           label: 'Users',         path: '/admin/users'        },
+    { icon: ShieldCheck,     label: 'Tutor Verify',  path: '/admin/tutor-verify' },
+    { icon: BookOpen,        label: 'Sessions',      path: '/admin/sessions'     },
+    { icon: Settings,        label: 'Settings',      path: '/profile'            },
+  ];
     default: return [];
   }
 }
@@ -55,7 +62,12 @@ export function Sidebar({ role }: SidebarProps) {
   const [minimized,       setMinimized]       = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const menuItems = getMenuItems(role);
+  const isPendingTutor =
+    role === 'TUTOR' &&
+    currentUser?.verificationStatus !== 'APPROVED' &&
+    currentUser?.verificationStatus !== 'NOT_APPLICABLE';
+
+  const menuItems = getMenuItems(role, isPendingTutor ?? false);
   const isActive  = (p: string) => location.pathname === p;
 
   const handleLogout = async () => {
@@ -64,28 +76,28 @@ export function Sidebar({ role }: SidebarProps) {
     navigate('/login');
   };
 
-  // ── Sidebar width ────────────────────────────────────────────────────────
   const W = minimized ? '72px' : '256px';
 
-  // ── Shared button base ───────────────────────────────────────────────────
-  const navBtn = (active: boolean): React.CSSProperties => ({
+  const navBtn = (active: boolean, locked?: boolean): React.CSSProperties => ({
     width: '100%', display: 'flex', alignItems: 'center',
     gap: minimized ? 0 : '11px',
     justifyContent: minimized ? 'center' : 'flex-start',
     padding: minimized ? '11px' : '11px 14px',
-    borderRadius: '10px', border: 'none', cursor: 'pointer',
+    borderRadius: '10px', border: 'none', cursor: locked ? 'not-allowed' : 'pointer',
     transition: 'all 0.18s ease', textAlign: 'left',
     background: active
       ? 'linear-gradient(135deg, rgba(59,130,246,0.3), rgba(37,99,235,0.2))'
       : 'transparent',
     boxShadow: active ? 'inset 0 0 0 1px rgba(59,130,246,0.25)' : 'none',
-    color: active ? '#93C5FD' : 'rgba(148,163,184,0.82)',
+    color: locked
+      ? 'rgba(148,163,184,0.35)'
+      : active ? '#93C5FD' : 'rgba(148,163,184,0.82)',
     position: 'relative',
+    opacity: locked ? 0.55 : 1,
   });
 
   return (
     <>
-      {/* Mobile toggle */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
         className="fixed top-4 left-4 z-50 lg:hidden p-2.5 rounded-xl shadow-lg"
@@ -94,7 +106,6 @@ export function Sidebar({ role }: SidebarProps) {
         {mobileOpen ? <X size={21} /> : <Menu size={21} />}
       </button>
 
-      {/* ── Sidebar panel ───────────────────────────────────────────────── */}
       <div
         className={`fixed left-0 top-0 h-screen z-40 flex flex-col transition-all duration-300 lg:relative lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
         style={{
@@ -136,7 +147,6 @@ export function Sidebar({ role }: SidebarProps) {
             </button>
           </div>
 
-          {/* User pill */}
           {!minimized && currentUser && (
             <div style={{ marginTop: '13px', padding: '8px 11px', borderRadius: '9px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: '9px' }}>
               {currentUser.profilePhotoUrl ? (
@@ -158,6 +168,23 @@ export function Sidebar({ role }: SidebarProps) {
           )}
         </div>
 
+        {/* Pending banner */}
+        {isPendingTutor && !minimized && (
+          <div style={{
+            margin: '10px 10px 0',
+            padding: '9px 12px',
+            borderRadius: '9px',
+            background: 'rgba(251,191,36,0.12)',
+            border: '1px solid rgba(251,191,36,0.25)',
+            display: 'flex', alignItems: 'center', gap: '8px',
+          }}>
+            <Lock size={13} color="#FCD34D" />
+            <span style={{ color: '#FCD34D', fontSize: '11px', fontWeight: 600, lineHeight: 1.4 }}>
+              Awaiting admin approval
+            </span>
+          </div>
+        )}
+
         {/* Nav */}
         <nav style={{ flex: 1, overflowY: 'auto', padding: minimized ? '10px 8px' : '10px' }}>
           {!minimized && (
@@ -166,22 +193,39 @@ export function Sidebar({ role }: SidebarProps) {
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            {menuItems.map(({ icon: Icon, label, path }) => {
+            {menuItems.map(({ icon: Icon, label, path, locked }) => {
               const active = isActive(path);
               return (
                 <button
                   key={path}
-                  onClick={() => { navigate(path); setMobileOpen(false); }}
-                  title={minimized ? label : ''}
-                  style={navBtn(active)}
-                  onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(147,197,253,0.95)'; } }}
-                  onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(148,163,184,0.82)'; } }}
+                  onClick={() => {
+                    if (locked) return;
+                    navigate(path);
+                    setMobileOpen(false);
+                  }}
+                  title={minimized ? label : locked ? 'Requires admin approval' : ''}
+                  style={navBtn(active, locked)}
+                  onMouseEnter={e => {
+                    if (!active && !locked) {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                      e.currentTarget.style.color = 'rgba(147,197,253,0.95)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!active && !locked) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'rgba(148,163,184,0.82)';
+                    }
+                  }}
                 >
-                  {active && !minimized && (
+                  {active && !minimized && !locked && (
                     <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '3px', height: '58%', borderRadius: '0 3px 3px 0', background: 'linear-gradient(180deg,#60A5FA,#3B82F6)' }} />
                   )}
                   <Icon size={18} strokeWidth={active ? 2.2 : 1.8} />
-                  {!minimized && <span style={{ fontSize: '13.5px', fontWeight: active ? 600 : 500 }}>{label}</span>}
+                  {!minimized && (
+                    <span style={{ fontSize: '13.5px', fontWeight: active ? 600 : 500, flex: 1 }}>{label}</span>
+                  )}
+                  {!minimized && locked && <Lock size={12} style={{ flexShrink: 0 }} />}
                 </button>
               );
             })}
@@ -203,15 +247,13 @@ export function Sidebar({ role }: SidebarProps) {
         </div>
       </div>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-30 lg:hidden" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)' }} onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* ── Logout Modal ────────────────────────────────────────────────── */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,10,35,0.7)', backdropFilter: 'blur(6px)' }} onClick={() => setShowLogoutModal(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'linear-gradient(145deg,#ffffff,#f0f7ff)', borderRadius: '20px', padding: '32px', maxWidth: '360px', width: '100%', boxShadow: '0 28px 60px rgba(0,47,108,0.28), 0 0 0 1px rgba(59,130,246,0.12)', textAlign: 'center', animation: 'ttModal 0.22s cubic-bezier(0.34,1.56,0.64,1)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'linear-gradient(145deg,#ffffff,#f0f7ff)', borderRadius: '20px', padding: '32px', maxWidth: '360px', width: '100%', boxShadow: '0 28px 60px rgba(0,47,108,0.28), 0 0 0 1px rgba(59,130,246,0.12)', textAlign: 'center' }}>
             <div style={{ width: '62px', height: '62px', borderRadius: '50%', background: 'linear-gradient(135deg,#FEE2E2,#FECACA)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 8px 22px rgba(220,38,38,0.18)' }}>
               <LogOut size={26} color="#DC2626" />
             </div>
@@ -220,15 +262,14 @@ export function Sidebar({ role }: SidebarProps) {
               You'll be signed out of your TutorTime account.
             </p>
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={() => setShowLogoutModal(false)} style={{ flex: 1, padding: '12px 0', borderRadius: '12px', border: '1.5px solid #BFDBFE', background: 'white', color: '#1E40AF', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+              <button onClick={() => setShowLogoutModal(false)} style={{ flex: 1, padding: '12px 0', borderRadius: '12px', border: '1.5px solid #BFDBFE', background: 'white', color: '#1E40AF', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = '#EFF6FF'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
                 Stay
               </button>
-              <button onClick={handleLogout} style={{ flex: 1, padding: '12px 0', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg,#EF4444,#B91C1C)', color: 'white', fontWeight: 700, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 14px rgba(220,38,38,0.35)' }} onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(220,38,38,0.45)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(220,38,38,0.35)'; }}>
+              <button onClick={handleLogout} style={{ flex: 1, padding: '12px 0', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg,#EF4444,#B91C1C)', color: 'white', fontWeight: 700, fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 14px rgba(220,38,38,0.35)' }} onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }} onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}>
                 Yes, Sign Out
               </button>
             </div>
           </div>
-          <style>{`@keyframes ttModal { from { opacity:0; transform:scale(0.88) translateY(12px); } to { opacity:1; transform:scale(1) translateY(0); } }`}</style>
         </div>
       )}
     </>

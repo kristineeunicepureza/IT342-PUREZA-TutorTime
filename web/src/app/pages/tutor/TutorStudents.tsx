@@ -2,30 +2,51 @@ import { useState, useEffect } from 'react';
 import { DashboardLayout } from '../../components/layouts/DashboardLayout';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/apiService';
-import { GraduationCap, Calendar, Search, RefreshCw, Clock, CheckCircle2, XCircle, Star } from 'lucide-react';
+import {
+  GraduationCap, Calendar, Search, RefreshCw, MapPin,
+  Clock, CheckCircle2, XCircle, Star, Check, X, Loader2,
+  UserX, Ban,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 interface BookingRow {
   id: number;
   studentName: string;
   subject: string;
+  location?: string;
   notes: string;
   status: string;
   scheduledTime: string;
+  cancellationReason?: string;
+  rejectionReason?: string;
 }
 
 const statusColor: Record<string, { bg: string; text: string; icon: React.ElementType }> = {
-  PENDING:   { bg: '#FFFBEB', text: '#D97706', icon: Clock       },
-  CONFIRMED: { bg: '#EFF6FF', text: '#2563EB', icon: CheckCircle2 },
-  COMPLETED: { bg: '#ECFDF5', text: '#059669', icon: Star         },
-  CANCELLED: { bg: '#FEF2F2', text: '#DC2626', icon: XCircle      },
+  PENDING:            { bg: '#FFFBEB', text: '#D97706', icon: Clock        },
+  CONFIRMED:          { bg: '#EFF6FF', text: '#2563EB', icon: CheckCircle2  },
+  COMPLETED:          { bg: '#ECFDF5', text: '#059669', icon: Star          },
+  CANCELLED:          { bg: '#FEF2F2', text: '#DC2626', icon: XCircle       },
+  REJECTED:           { bg: '#FEF2F2', text: '#DC2626', icon: XCircle       },
+  NO_SHOW_STUDENT:    { bg: '#FFF7ED', text: '#C2410C', icon: UserX         },
+  NO_SHOW_TUTOR:      { bg: '#FFF7ED', text: '#C2410C', icon: UserX         },
 };
+
+type SessionAction = 'complete' | 'no_show_student' | 'cancel';
 
 export function TutorStudents() {
   const { currentUser } = useApp();
-  const [bookings, setBookings] = useState<BookingRow[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [search,   setSearch]   = useState('');
+  const [bookings,  setBookings]  = useState<BookingRow[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [search,    setSearch]    = useState('');
+  const [acting,    setActing]    = useState<number | null>(null);
+
+  // Reject modal
+  const [rejectModal,  setRejectModal]  = useState<{ id: number } | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // Session action modal (for confirmed bookings)
+  const [sessionModal,  setSessionModal]  = useState<{ id: number; action: SessionAction } | null>(null);
+  const [sessionNote,   setSessionNote]   = useState('');
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -41,6 +62,69 @@ export function TutorStudents() {
 
   useEffect(() => { fetchBookings(); }, []);
 
+  const handleConfirm = async (id: number) => {
+    setActing(id);
+    try {
+      await api.patch(`/api/bookings/${id}/confirm`);
+      toast.success('Booking confirmed!');
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'CONFIRMED' } : b));
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to confirm');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const handleRejectSubmit = async () => {
+    if (!rejectModal) return;
+    setActing(rejectModal.id);
+    try {
+      await api.patch(`/api/bookings/${rejectModal.id}/reject`, { reason: rejectReason });
+      toast.success('Booking rejected.');
+      setBookings(prev => prev.map(b =>
+        b.id === rejectModal.id ? { ...b, status: 'REJECTED', rejectionReason: rejectReason } : b
+      ));
+      setRejectModal(null); setRejectReason('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to reject');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const handleSessionAction = async () => {
+    if (!sessionModal) return;
+    const { id, action } = sessionModal;
+    const endpointMap: Record<SessionAction, string> = {
+      complete:        `/api/bookings/${id}/complete`,
+      no_show_student: `/api/bookings/${id}/no-show-student`,
+      cancel:          `/api/bookings/${id}/cancel`,
+    };
+    const statusMap: Record<SessionAction, string> = {
+      complete:        'COMPLETED',
+      no_show_student: 'NO_SHOW_STUDENT',
+      cancel:          'CANCELLED',
+    };
+    const labelMap: Record<SessionAction, string> = {
+      complete:        'Session marked as completed!',
+      no_show_student: 'Marked as student no-show.',
+      cancel:          'Session cancelled.',
+    };
+    setActing(id);
+    try {
+      await api.patch(endpointMap[action], sessionNote ? { reason: sessionNote } : {});
+      toast.success(labelMap[action]);
+      setBookings(prev => prev.map(b =>
+        b.id === id ? { ...b, status: statusMap[action], cancellationReason: action === 'cancel' ? sessionNote : b.cancellationReason } : b
+      ));
+      setSessionModal(null); setSessionNote('');
+    } catch (err: any) {
+      toast.error(err.message || 'Action failed');
+    } finally {
+      setActing(null);
+    }
+  };
+
   if (!currentUser) return null;
 
   const filtered = bookings.filter(b =>
@@ -48,22 +132,28 @@ export function TutorStudents() {
   );
 
   const upcoming = bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'PENDING').length;
+  const pending  = bookings.filter(b => b.status === 'PENDING').length;
+
+  const actionConfig: Record<SessionAction, { label: string; color: string; bg: string; icon: React.ElementType; desc: string }> = {
+    complete:        { label: 'Complete Session',   color: '#059669', bg: 'linear-gradient(135deg,#10B981,#059669)', icon: CheckCircle2, desc: 'Mark this session as successfully completed.' },
+    no_show_student: { label: 'Student No-Show',    color: '#C2410C', bg: 'linear-gradient(135deg,#F97316,#C2410C)', icon: UserX,        desc: 'Mark that the student did not attend.' },
+    cancel:          { label: 'Cancel Session',     color: '#DC2626', bg: 'linear-gradient(135deg,#EF4444,#B91C1C)', icon: Ban,          desc: 'Cancel this confirmed session.' },
+  };
 
   return (
     <DashboardLayout role="TUTOR">
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ color: '#001a4d', fontWeight: 800, fontSize: '24px', letterSpacing: '-0.5px', marginBottom: '4px' }}>
-          My Students
-        </h1>
-        <p style={{ color: '#5a7bad', fontSize: '14px' }}>Students who have booked sessions with you.</p>
+        <h1 style={{ color: '#001a4d', fontWeight: 800, fontSize: '24px', letterSpacing: '-0.5px', marginBottom: '4px' }}>My Students</h1>
+        <p style={{ color: '#5a7bad', fontSize: '14px' }}>Review and manage student booking requests.</p>
       </div>
 
-      {/* Quick stat */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '14px', marginBottom: '24px' }}>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '24px' }}>
         {[
-          { label: 'Total Bookings',    value: bookings.length,  color: '#3B82F6', bg: '#EFF6FF',  icon: Calendar       },
-          { label: 'Upcoming',          value: upcoming,          color: '#10B981', bg: '#ECFDF5',  icon: CheckCircle2   },
-          { label: 'Unique Students',   value: new Set(bookings.map(b => b.studentName)).size, color: '#F59E0B', bg: '#FFFBEB', icon: GraduationCap },
+          { label: 'Total Bookings',  value: bookings.length,  color: '#3B82F6', bg: '#EFF6FF',  icon: Calendar       },
+          { label: 'Pending Review',  value: pending,          color: '#F59E0B', bg: '#FFFBEB',  icon: Clock          },
+          { label: 'Upcoming',        value: upcoming,         color: '#10B981', bg: '#ECFDF5',  icon: CheckCircle2   },
+          { label: 'Unique Students', value: new Set(bookings.map(b => b.studentName)).size, color: '#8B5CF6', bg: '#F3F0FF', icon: GraduationCap },
         ].map(({ label, value, color, bg, icon: Icon }) => (
           <div key={label} style={{ background: 'white', borderRadius: '14px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px', boxShadow: '0 4px 16px rgba(0,47,108,0.07)', border: '1px solid rgba(59,130,246,0.08)' }}>
             <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -76,6 +166,15 @@ export function TutorStudents() {
           </div>
         ))}
       </div>
+
+      {pending > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', borderRadius: '12px', background: 'linear-gradient(135deg,#FFFBEB,#FEF3C7)', border: '1px solid #FCD34D', marginBottom: '18px' }}>
+          <Clock size={16} color="#D97706" />
+          <span style={{ color: '#92400E', fontWeight: 600, fontSize: '13.5px' }}>
+            You have <strong>{pending}</strong> pending booking{pending > 1 ? 's' : ''} waiting for your response.
+          </span>
+        </div>
+      )}
 
       {/* Table */}
       <div style={{ background: 'white', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,47,108,0.07)', border: '1px solid rgba(59,130,246,0.08)', overflow: 'hidden' }}>
@@ -96,25 +195,28 @@ export function TutorStudents() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f7faff' }}>
-                {['Student','Subject','Notes','Scheduled','Status'].map(h => (
+                {['Student', 'Subject', 'Location', 'Scheduled', 'Status', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '12px 18px', textAlign: 'left', color: '#5a7bad', fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.7px', borderBottom: '1px solid #e0eaff', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading…</td></tr>
+                <tr><td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                <tr><td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
                   <GraduationCap size={40} style={{ margin: '0 auto 10px', opacity: 0.4 }} /><br />No student bookings yet.
                 </td></tr>
               ) : filtered.map((b, i) => {
                 const st = statusColor[b.status] || statusColor.PENDING;
                 const Icon = st.icon;
+                const isPending   = b.status === 'PENDING';
+                const isConfirmed = b.status === 'CONFIRMED';
+                const isActing    = acting === b.id;
                 return (
-                  <tr key={b.id} style={{ borderBottom: i < filtered.length-1 ? '1px solid #f0f4fa' : 'none' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#f7faff')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  <tr key={b.id} style={{ borderBottom: i < filtered.length - 1 ? '1px solid #f0f4fa' : 'none', background: isPending ? 'rgba(251,191,36,0.03)' : 'transparent' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = isPending ? 'rgba(251,191,36,0.06)' : '#f7faff')}
+                    onMouseLeave={e => (e.currentTarget.style.background = isPending ? 'rgba(251,191,36,0.03)' : 'transparent')}
                   >
                     <td style={{ padding: '13px 18px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -125,14 +227,58 @@ export function TutorStudents() {
                       </div>
                     </td>
                     <td style={{ padding: '13px 18px', color: '#5a7bad', fontSize: '13px' }}>{b.subject}</td>
-                    <td style={{ padding: '13px 18px', color: '#94a3b8', fontSize: '12.5px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.notes || '—'}</td>
+                    <td style={{ padding: '13px 18px', fontSize: '13px' }}>
+                      {b.location ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#5a7bad' }}>
+                          <MapPin size={13} color="#93C5FD" /> {b.location}
+                        </div>
+                      ) : <span style={{ color: '#c4d4e8' }}>—</span>}
+                    </td>
                     <td style={{ padding: '13px 18px', color: '#5a7bad', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
                       {new Date(b.scheduledTime).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td style={{ padding: '13px 18px' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 11px', borderRadius: '20px', background: st.bg, color: st.text, fontSize: '12px', fontWeight: 700 }}>
-                        <Icon size={12} /> {b.status.charAt(0)+b.status.slice(1).toLowerCase()}
+                        <Icon size={12} /> {b.status.replace(/_/g, ' ').charAt(0) + b.status.replace(/_/g, ' ').slice(1).toLowerCase()}
                       </span>
+                      {b.cancellationReason && (
+                        <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '4px' }}>Reason: {b.cancellationReason}</div>
+                      )}
+                    </td>
+                    <td style={{ padding: '13px 18px' }}>
+                      {isPending && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => handleConfirm(b.id)} disabled={isActing} title="Accept booking"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg,#10B981,#059669)', color: 'white', fontWeight: 700, fontSize: '12.5px', cursor: isActing ? 'not-allowed' : 'pointer', boxShadow: '0 3px 8px rgba(5,150,105,0.3)', opacity: isActing ? 0.7 : 1 }}>
+                            {isActing ? <Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Check size={12} />} Accept
+                          </button>
+                          <button onClick={() => { setRejectModal({ id: b.id }); setRejectReason(''); }} disabled={isActing} title="Reject booking"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '9px', border: '1.5px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', fontWeight: 700, fontSize: '12.5px', cursor: isActing ? 'not-allowed' : 'pointer', opacity: isActing ? 0.7 : 1 }}>
+                            <X size={12} /> Reject
+                          </button>
+                        </div>
+                      )}
+                      {isConfirmed && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {(['complete', 'no_show_student', 'cancel'] as SessionAction[]).map(action => {
+                            const cfg = actionConfig[action];
+                            const Ic = cfg.icon;
+                            return (
+                              <button key={action}
+                                onClick={() => { setSessionModal({ id: b.id, action }); setSessionNote(''); }}
+                                disabled={isActing}
+                                title={cfg.label}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '8px', border: 'none', background: cfg.bg, color: 'white', fontWeight: 600, fontSize: '11.5px', cursor: isActing ? 'not-allowed' : 'pointer', opacity: isActing ? 0.6 : 1, whiteSpace: 'nowrap', boxShadow: `0 2px 6px ${cfg.color}44` }}
+                              >
+                                <Ic size={11} /> {cfg.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {!isPending && !isConfirmed && (
+                        <span style={{ color: '#c4d4e8', fontSize: '12px' }}>—</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -146,6 +292,82 @@ export function TutorStudents() {
           </div>
         )}
       </div>
+
+      {/* Reject Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,10,35,0.65)', backdropFilter: 'blur(6px)' }}
+          onClick={() => setRejectModal(null)}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '18px', padding: '28px', maxWidth: '420px', width: '100%', boxShadow: '0 28px 60px rgba(0,47,108,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <XCircle size={22} color="#DC2626" />
+              </div>
+              <div>
+                <h3 style={{ color: '#001a4d', fontWeight: 800, fontSize: '17px', marginBottom: '2px' }}>Reject Booking</h3>
+                <p style={{ color: '#5a7bad', fontSize: '13px' }}>Optionally provide a reason for the student.</p>
+              </div>
+            </div>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+              placeholder="Reason for rejection (optional)…" rows={3}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e0eaff', background: '#f7faff', fontSize: '14px', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '18px' }}
+              onFocus={e => e.target.style.borderColor = '#3B82F6'} onBlur={e => e.target.style.borderColor = '#e0eaff'}
+            />
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => setRejectModal(null)} style={{ flex: 1, padding: '11px', borderRadius: '11px', border: '1.5px solid #BFDBFE', background: 'white', color: '#1E40AF', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleRejectSubmit} disabled={acting !== null}
+                style={{ flex: 1, padding: '11px', borderRadius: '11px', border: 'none', background: 'linear-gradient(135deg,#EF4444,#B91C1C)', color: 'white', fontWeight: 700, fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 14px rgba(220,38,38,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' }}>
+                {acting ? <Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> : <XCircle size={15} />}
+                Confirm Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Session Action Modal */}
+      {sessionModal && (() => {
+        const cfg = actionConfig[sessionModal.action];
+        const Ic  = cfg.icon;
+        const needsNote = sessionModal.action === 'cancel';
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,10,35,0.65)', backdropFilter: 'blur(6px)' }}
+            onClick={() => setSessionModal(null)}
+          >
+            <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: '18px', padding: '28px', maxWidth: '420px', width: '100%', boxShadow: '0 28px 60px rgba(0,47,108,0.25)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ic size={22} color={cfg.color} />
+                </div>
+                <div>
+                  <h3 style={{ color: '#001a4d', fontWeight: 800, fontSize: '17px', marginBottom: '2px' }}>{cfg.label}</h3>
+                  <p style={{ color: '#5a7bad', fontSize: '13px' }}>{cfg.desc}</p>
+                </div>
+              </div>
+              {needsNote && (
+                <textarea value={sessionNote} onChange={e => setSessionNote(e.target.value)}
+                  placeholder="Reason for cancellation (optional)…" rows={3}
+                  style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e0eaff', background: '#f7faff', fontSize: '14px', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '18px' }}
+                  onFocus={e => e.target.style.borderColor = '#3B82F6'} onBlur={e => e.target.style.borderColor = '#e0eaff'}
+                />
+              )}
+              {!needsNote && <div style={{ height: '8px' }} />}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setSessionModal(null)} style={{ flex: 1, padding: '11px', borderRadius: '11px', border: '1.5px solid #BFDBFE', background: 'white', color: '#1E40AF', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={handleSessionAction} disabled={acting !== null}
+                  style={{ flex: 1, padding: '11px', borderRadius: '11px', border: 'none', background: cfg.bg, color: 'white', fontWeight: 700, fontSize: '14px', cursor: 'pointer', boxShadow: `0 4px 14px ${cfg.color}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' }}>
+                  {acting ? <Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Ic size={15} />}
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </DashboardLayout>
   );
 }

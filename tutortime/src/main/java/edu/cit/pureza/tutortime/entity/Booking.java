@@ -40,6 +40,16 @@ public class Booking {
     @Column(nullable = false)
     private LocalDateTime scheduledTime;
 
+    @Column(length = 500)
+    private String cancellationReason;
+
+    @Column(length = 500)
+    private String rejectionReason;
+
+    @ManyToOne
+    @JoinColumn(name = "availability_slot_id")
+    private AvailabilitySlot availabilitySlot;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -59,9 +69,12 @@ public class Booking {
     }
 
     public enum BookingStatus {
-        PENDING,
-        CONFIRMED,
-        COMPLETED,
-        CANCELLED
-    }
+    PENDING,
+    CONFIRMED,
+    REJECTED,
+    COMPLETED,
+    CANCELLED,
+    NO_SHOW_STUDENT,   // ← add this
+    NO_SHOW_TUTOR      // ← add this
+}
 }

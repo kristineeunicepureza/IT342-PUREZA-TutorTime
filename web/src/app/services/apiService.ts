@@ -28,13 +28,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   // Handle 204 No Content
   if (response.status === 204) return undefined as unknown as T;
 
-  const data = await response.json();
+  // Safely parse JSON — guard against empty bodies (403, 404, network errors, etc.)
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
 
-  if (!response.ok || data.success === false) {
+  if (!response.ok || data?.success === false) {
     throw new Error(extractMsg(data, `Request failed (${response.status})`));
   }
 
-  return (data.data !== undefined ? data.data : data) as T;
+  return (data?.data !== undefined ? data.data : data) as T;
 }
 
 // ─── public API object ────────────────────────────────────────────────────

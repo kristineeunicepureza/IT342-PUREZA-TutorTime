@@ -21,4 +21,8 @@ public class BookingDto {
     private String status;
     private LocalDateTime scheduledTime;
     private LocalDateTime createdAt;
+    private String cancellationReason;
+    private String rejectionReason;
+    private Long availabilitySlotId;
+    private String location;
 }

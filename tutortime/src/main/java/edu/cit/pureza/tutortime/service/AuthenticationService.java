@@ -7,6 +7,7 @@ import edu.cit.pureza.tutortime.dto.UserDto;
 import edu.cit.pureza.tutortime.entity.User;
 import edu.cit.pureza.tutortime.repository.UserRepository;
 import edu.cit.pureza.tutortime.security.JwtTokenProvider;
+import edu.cit.pureza.tutortime.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ public class AuthenticationService {
     private final UserRepository  userRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder  passwordEncoder;
+    private final NotificationService notificationService;
 
     // ──────────────────────────────────────────────────────────────────────────
     // REGISTER
@@ -61,9 +63,19 @@ public class AuthenticationService {
                 .lastName(request.getLastName().trim())
                 .middleInitial(request.getMiddleInitial())
                 .role(role)
+                // Tutors must wait for admin approval; students are not subject to verification
+                .verificationStatus(role == User.UserRole.TUTOR
+                        ? User.VerificationStatus.PENDING
+                        : User.VerificationStatus.NOT_APPLICABLE)
                 .build();
 
         User saved = userRepository.save(user);
+
+        // Notify admins when a new tutor registers
+        if (role == User.UserRole.TUTOR) {
+            notificationService.notifyTutorRegistered(
+                    saved.getFirstName() + " " + saved.getLastName());
+        }
 
         String token        = jwtTokenProvider.generateToken(saved.getEmail(), saved.getId());
         String refreshToken = jwtTokenProvider.generateRefreshToken(saved.getEmail(), saved.getId());

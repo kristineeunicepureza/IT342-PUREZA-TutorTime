@@ -9,6 +9,7 @@ export interface UserProfile {
   middleInitial?: string;
   role: 'STUDENT' | 'TUTOR' | 'ADMIN';
   profilePhotoUrl?: string;
+  verificationStatus?: 'NOT_APPLICABLE' | 'PENDING' | 'APPROVED' | 'REJECTED';
   // tutor-only
   bio?: string;
   expertise?: string;
@@ -67,7 +68,6 @@ export async function uploadProfilePhoto(
   const formData = new FormData();
   formData.append('file', file);
   
-  // The backend will handle the file upload and update the user, returning the new UserProfile
   const profile = await api.upload<UserProfile>('/api/users/me/photo', formData);
   
   if (!profile.profilePhotoUrl) {

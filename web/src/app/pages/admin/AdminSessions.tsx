@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { DashboardLayout } from '../../components/layouts/DashboardLayout';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/apiService';
-import { Calendar, Search, RefreshCw, CheckCircle2, Clock, XCircle, Star } from 'lucide-react';
+import { Calendar, Search, RefreshCw, CheckCircle2, Clock, XCircle, Star, UserX } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface BookingRow {
@@ -17,10 +17,13 @@ interface BookingRow {
 }
 
 const statusColor: Record<string, { bg: string; text: string; icon: React.ElementType }> = {
-  PENDING:   { bg: '#FFFBEB', text: '#D97706', icon: Clock      },
-  CONFIRMED: { bg: '#EFF6FF', text: '#2563EB', icon: CheckCircle2 },
-  COMPLETED: { bg: '#ECFDF5', text: '#059669', icon: Star        },
-  CANCELLED: { bg: '#FEF2F2', text: '#DC2626', icon: XCircle     },
+  PENDING:         { bg: '#FFFBEB', text: '#D97706', icon: Clock        },
+  CONFIRMED:       { bg: '#EFF6FF', text: '#2563EB', icon: CheckCircle2 },
+  COMPLETED:       { bg: '#ECFDF5', text: '#059669', icon: Star         },
+  CANCELLED:       { bg: '#FEF2F2', text: '#DC2626', icon: XCircle      },
+  REJECTED:        { bg: '#FEF2F2', text: '#DC2626', icon: XCircle      },
+  NO_SHOW_STUDENT: { bg: '#FFF7ED', text: '#C2410C', icon: UserX        },
+  NO_SHOW_TUTOR:   { bg: '#FFF7ED', text: '#C2410C', icon: UserX        },
 };
 
 export function AdminSessions() {
@@ -66,9 +69,9 @@ export function AdminSessions() {
 
       {/* Stat pills */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {['ALL','PENDING','CONFIRMED','COMPLETED','CANCELLED'].map(s => (
-          <button key={s} onClick={() => setFilter(s)} style={{ padding: '7px 16px', borderRadius: '20px', border: `1.5px solid ${filter === s ? '#3B82F6' : '#e0eaff'}`, background: filter === s ? 'linear-gradient(135deg,#EFF6FF,#DBEAFE)' : 'white', color: filter === s ? '#1D4ED8' : '#6B8FC4', fontWeight: filter === s ? 700 : 500, fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s' }}>
-            {s === 'ALL' ? 'All' : s.charAt(0)+s.slice(1).toLowerCase()} ({counts[s] || 0})
+        {['ALL','PENDING','CONFIRMED','COMPLETED','CANCELLED','NO_SHOW_STUDENT','NO_SHOW_TUTOR'].map(s => (
+          <button key={s} onClick={() => setFilter(s)} style={{ padding: '7px 16px', borderRadius: '20px', border: `1.5px solid ${filter === s ? '#3B82F6' : '#e0eaff'}`, background: filter === s ? 'linear-gradient(135deg,#EFF6FF,#DBEAFE)' : 'white', color: filter === s ? '#1D4ED8' : '#6B8FC4', fontWeight: filter === s ? 700 : 500, fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+            {s === 'ALL' ? 'All' : s.replace(/_/g, ' ').charAt(0) + s.replace(/_/g, ' ').slice(1).toLowerCase()} ({counts[s] || 0})
           </button>
         ))}
       </div>
@@ -120,7 +123,7 @@ export function AdminSessions() {
                     </td>
                     <td style={{ padding: '13px 18px' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 11px', borderRadius: '20px', background: st.bg, color: st.text, fontSize: '12px', fontWeight: 700 }}>
-                        <Icon size={12} /> {b.status.charAt(0)+b.status.slice(1).toLowerCase()}
+                        <Icon size={12} /> {b.status.replace(/_/g,' ').charAt(0) + b.status.replace(/_/g,' ').slice(1).toLowerCase()}
                       </span>
                     </td>
                   </tr>

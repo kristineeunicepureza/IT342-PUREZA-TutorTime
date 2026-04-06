@@ -18,13 +18,21 @@ export function SignupPage() {
   const { signup, isLoading, error, currentUser, clearError } = useApp();
 
   useEffect(() => {
-    if (currentUser) redirectToDashboard(currentUser.role);
+    if (currentUser) redirectAfterSignup();
   }, [currentUser]);
 
-  const redirectToDashboard = (role: string) => {
-    if (role === 'STUDENT') navigate('/student/dashboard');
-    else if (role === 'TUTOR') navigate('/tutor/dashboard');
-    else if (role === 'ADMIN') navigate('/admin/dashboard');
+  const redirectAfterSignup = () => {
+    if (!currentUser) return;
+    if (currentUser.role === 'STUDENT') navigate('/student/dashboard');
+    else if (currentUser.role === 'ADMIN') navigate('/admin/dashboard');
+    else if (currentUser.role === 'TUTOR') {
+      // New tutors are always PENDING — send them to the waiting page
+      if (currentUser.verificationStatus === 'APPROVED') {
+        navigate('/tutor/dashboard');
+      } else {
+        navigate('/tutor/pending');
+      }
+    }
   };
 
   const validateEmail = (value: string) => {
